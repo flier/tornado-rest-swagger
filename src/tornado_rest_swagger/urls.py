@@ -1,24 +1,24 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-import os.path
+from tornado.web import URLSpec, StaticFileHandler
 
-import tornado.web
-
-from views import SwaggerUIHandler, SwaggerResourcesHandler, SwaggerApiHandler
+from tornado_rest_swagger.settings import default_settings, \
+    URL_SWAGGER_API_DOCS, URL_SWAGGER_API_LIST, URL_SWAGGER_API_SPEC, ASSETS_PATH
+from tornado_rest_swagger.views import SwaggerUIHandler, SwaggerResourcesHandler, SwaggerApiHandler
 
 __author__ = 'flier'
 
-ASSETS_PATH = os.path.join(os.path.dirname(os.path.normpath(__file__)), 'assets')
 
-
-def handle_urls(prefix):
+def handle_urls(prefix, **opts):
     if prefix[-1] != '/':
         prefix += '/'
 
-    return [
-        tornado.web.URLSpec(prefix + r'$', SwaggerUIHandler, { 'assets_path': ASSETS_PATH }, name='swagger-api-doc'),
-        tornado.web.URLSpec(prefix + r'api/$', SwaggerResourcesHandler, name='swagger-api-list'),
-        (prefix + r'api/(?P<path>.*)/$', SwaggerApiHandler),
+    default_settings.update(opts)
 
-        (prefix + r'(.*\.(css|png|gif|js))', tornado.web.StaticFileHandler, { 'path': ASSETS_PATH }),
+    return [
+        URLSpec(prefix + r'$',                  SwaggerUIHandler,        default_settings, name=URL_SWAGGER_API_DOCS),
+        URLSpec(prefix + r'api/$',              SwaggerResourcesHandler, default_settings, name=URL_SWAGGER_API_LIST),
+        URLSpec(prefix + r'api/(?P<path>.*)/$', SwaggerApiHandler,       default_settings, name=URL_SWAGGER_API_SPEC),
+
+        (prefix + r'(.*\.(css|png|gif|js))',    StaticFileHandler,       { 'path': ASSETS_PATH }),
     ]
