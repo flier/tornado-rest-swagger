@@ -67,28 +67,34 @@ class SwaggerApiHandler(tornado.web.RequestHandler):
     https://github.com/wordnik/swagger-core/wiki/API-Declaration
     """
 
-    def initialize(self, api_version, **kwds):
+    def initialize(self, api_version, base_url, **kwds):
         self.api_version = api_version
+        self.base_url = base_url
 
     def get(self, path):
-        spec, apis = find_rest_api(self.application.handlers, path)
+        result = find_rest_api(self.application.handlers, path)
+
+        if result is None:
+            raise tornado.web.HTTPError(404)
+
+        spec, apis = result
 
         u = urlparse.urlparse(self.request.full_url())
 
         spec = {
             'apiVersion': self.api_version,
             'swaggerVersion': SWAGGER_VERSION,
-            'basePath': '%s/%s%s' % (u.scheme, u.netloc, u.path),
+            'basePath': urlparse.urljoin(self.request.full_url(), self.base_url),
             'apis': [{
                 'path': '/' + path,
                 'description': spec.handler_class.__doc__,
                 'operations': [{
                     'httpMethod': api.func.__name__.upper(),
                     'nickname': api.name,
-                    'parameters': [],
+                    'parameters': api.params.values(),
                     'summary': api.summary,
                     'notes': api.notes,
-                    'responseClass': api.response,
+                    'responseClass': api.responseClass,
                     'errorResponses': api.errors,
                 } for api in apis]
             }]

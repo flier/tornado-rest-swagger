@@ -4,15 +4,17 @@ import inspect
 
 from functools import wraps
 
+import epydoc.markup
+
 __author__ = 'flier'
 
 
 class rest_api(object):
-    def __init__(self, func_or_name, summary=None, notes=None, response=None, errors=None, **kwds):
+    def __init__(self, func_or_name, summary=None, notes=None, responseClass=None, errors=None, **kwds):
         self.summary = summary
         self.notes = notes
-        self.response = response
-        self.errors = errors
+        self.responseClass = responseClass
+        self.errors = errors or []
 
         self.kwds = kwds
 
@@ -34,14 +36,23 @@ class rest_api(object):
         if len(self.func_args) > 0 and self.func_args[0] == 'self':
             self.func_args = self.func_args[1:]
 
+        self.params = dict([(arg, {
+            'name': arg,
+            'required': True,
+            'paramType': 'path',
+            'dataType': 'string'
+        }) for arg in self.func_args])
+
+        doc = self.parse_docstring(inspect.getdoc(self.func))
+
         if self.summary is None:
-            self.summary = inspect.getcomments(self.func)
+            self.summary = inspect.getcomments(self.func) or doc.to_plaintext(None).split('\n')[0].strip()
 
         if self.summary:
             self.summary = self.summary.strip()
 
         if self.notes is None:
-            self.notes = inspect.getdoc(self.func)
+            self.notes = doc.to_plaintext(None)
 
         if self.notes:
             self.notes = self.notes.strip()
@@ -62,9 +73,44 @@ class rest_api(object):
 
         return __wrapper__
 
-    @property
-    def path(self):
-        return self.url_spec._path % tuple(["{%s}" % arg for arg in self.func_args])
+    def parse_docstring(self, text):
+        errors = []
+
+        doc = epydoc.markup.parse(text, markup='epytext', errors=errors)
+
+        _, fields = doc.split_fields(errors)
+
+        for field in fields:
+            tag = field.tag()
+            arg = field.arg()
+            body = field.body().to_plaintext(None).strip()
+
+            if tag == 'param':
+                self.params.setdefault(arg, {}).update({
+                    'name': arg,
+                    'description': body
+                })
+
+                if 'paramType' not in self.params[arg]:
+                    self.params[arg]['paramType'] = 'query'
+            elif field.tag() == 'type':
+                self.params.setdefault(arg, {}).update({
+                    'name': arg,
+                    'dataType': body
+                })
+            elif field.tag() == 'rtype':
+                self.responseClass = arg
+            elif field.tag() == 'raise':
+                self.errors.append({
+                    'code': arg,
+                    'reason': body
+                })
+            elif field.tag() == 'note':
+                self.notes = body
+            elif field.tag() == 'summary':
+                self.summary = body
+
+        return doc
 
 
 def discover_rest_apis(host_handlers):

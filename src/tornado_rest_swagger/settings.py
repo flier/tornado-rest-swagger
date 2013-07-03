@@ -13,6 +13,7 @@ URL_SWAGGER_API_SPEC = 'swagger-api-spec'
 ASSETS_PATH = os.path.join(os.path.dirname(os.path.normpath(__file__)), 'assets')
 
 default_settings = {
+    'base_url': '/',
     'assets_path': ASSETS_PATH,
 
     'api_version': '',
