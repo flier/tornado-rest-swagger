@@ -19,7 +19,7 @@ setup(
     zip_safe = False,
     install_requires = [
         'tornado>=3.1',
-        'enum34>=0.9',
+        'epydoc>=0.3.1'
     ],
     author = "Flier Lu",
     author_email = "flier.lu@gmail.com",

@@ -7,7 +7,7 @@ import tornado.web
 import tornado.template
 
 from tornado_rest_swagger.settings import SWAGGER_VERSION, URL_SWAGGER_API_LIST
-from tornado_rest_swagger.declare import find_rest_apis
+from tornado_rest_swagger.declare import discover_rest_apis, find_rest_api
 
 __author__ = 'flier'
 
@@ -43,11 +43,18 @@ class SwaggerResourcesHandler(tornado.web.RequestHandler):
     def get(self):
         self.set_header('content-type', 'application/json')
 
+        apis = [{
+            'path': path,
+            'description': desc
+        } for path, desc in discover_rest_apis(self.application.handlers)]
+
+        u = urlparse.urlparse(self.request.full_url())
+
         resources = {
             'apiVersion': self.api_version,
             'swaggerVersion': SWAGGER_VERSION,
-            'basePath': self.request.full_url(),
-            'apis': [{'path': api.path, 'description': api.summary} for api in find_rest_apis(self.application.handlers)]
+            'basePath': '%s://%s%s' % (u.scheme, u.netloc, u.path),
+            'apis': apis
         }
 
         self.finish(json_dumps(resources, self.get_arguments('pretty')))
@@ -60,11 +67,33 @@ class SwaggerApiHandler(tornado.web.RequestHandler):
     https://github.com/wordnik/swagger-core/wiki/API-Declaration
     """
 
+    def initialize(self, api_version, **kwds):
+        self.api_version = api_version
+
     def get(self, path):
-        self.set_header('content-type', 'application/json')
+        spec, apis = find_rest_api(self.application.handlers, path)
 
-        api_spec = {
+        u = urlparse.urlparse(self.request.full_url())
 
+        spec = {
+            'apiVersion': self.api_version,
+            'swaggerVersion': SWAGGER_VERSION,
+            'basePath': '%s/%s%s' % (u.scheme, u.netloc, u.path),
+            'apis': [{
+                'path': '/' + path,
+                'description': spec.handler_class.__doc__,
+                'operations': [{
+                    'httpMethod': api.func.__name__.upper(),
+                    'nickname': api.name,
+                    'parameters': [],
+                    'summary': api.summary,
+                    'notes': api.notes,
+                    'responseClass': api.response,
+                    'errorResponses': api.errors,
+                } for api in apis]
+            }]
         }
 
-        self.finish(json_dumps(api_spec, self.get_arguments('pretty')))
+        self.set_header('content-type', 'application/json')
+
+        self.finish(json_dumps(spec, self.get_arguments('pretty')))
